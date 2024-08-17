@@ -1,11 +1,14 @@
-name: Nightly tests
+name: Nightly Tests
+
+# Triggers
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *' # run at 2 AM UTC
+    - cron: '0 2 * * *' # Run at 2 AM UTC
 
+# Global environment variables
 env:
-    CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: always
 
 jobs:
   check_if_needs_running:
@@ -14,10 +17,12 @@ jobs:
       status: ${{ steps.count.outputs.status }}
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Count recent commits
-      id: count
-      run: echo "status=$(git log --oneline --since '24 hours ago' | wc -l)" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+      - name: Count recent commits
+        id: count
+        run: |
+          recent_commits=$(git log --oneline --since '24 hours ago' | wc -l)
+          echo "status=$recent_commits" >> $GITHUB_OUTPUT
 
   udeps:
     runs-on: ubuntu-latest
@@ -25,10 +30,10 @@ jobs:
     if: needs.check_if_needs_running.outputs.status > 0
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      - name: Install nightly toolchain
+      - name: Install Nightly Toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -46,40 +51,56 @@ jobs:
     if: needs.check_if_needs_running.outputs.status > 0
 
     steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
-    - name: ⚡ Cache rust
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.toml') }}
-    - name: ⚡ Cache nodejs
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/pilcom/node_modules
-        key: ${{ runner.os }}-pilcom-node-modules
-    - name: Install Rust toolchain 1.72
-      run: rustup toolchain install 1.72-x86_64-unknown-linux-gnu
-    - name: Install nightly
-      run: rustup toolchain install nightly-2023-01-03-x86_64-unknown-linux-gnu
-    - name: Install riscv target
-      run: rustup target add riscv32imac-unknown-none-elf --toolchain nightly-2023-01-03-x86_64-unknown-linux-gnu
-    - name: Install stdlib
-      run: rustup component add rust-src --toolchain nightly-2023-01-03-x86_64-unknown-linux-gnu
-    - name: Install pilcom
-      run: git clone https://github.com/0xPolygonHermez/pilcom.git  && cd pilcom && npm install
-    - name: Check without Halo2
-      run: cargo check --all --no-default-features
-    - name: Build
-      run: cargo build --all --release --all-features
-    - name: Run tests
-      # Number threads is set to 1 because the runner does not have enough memeory for more.
-      run: PILCOM=$(pwd)/pilcom/ cargo test --all --release --verbose --all-features -- --include-ignored --nocapture --test-threads=1
-    - name: Run benchmarks
-      run: cargo bench
-      working-directory: compiler
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Cache Rust Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Cache Node.js Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/pilcom/node_modules
+          key: ${{ runner.os }}-pilcom-node-modules
+
+      - name: Install Rust Toolchain 1.72
+        run: rustup toolchain install 1.72-x86_64-unknown-linux-gnu
+
+      - name: Install Specific Nightly Toolchain
+        run: rustup toolchain install nightly-2023-01-03-x86_64-unknown-linux-gnu
+
+      - name: Install RISC-V Target
+        run: rustup target add riscv32imac-unknown-none-elf --toolchain nightly-2023-01-03-x86_64-unknown-linux-gnu
+
+      - name: Add Standard Library for Nightly
+        run: rustup component add rust-src --toolchain nightly-2023-01-03-x86_64-unknown-linux-gnu
+
+      - name: Install Pilcom
+        run: |
+          git clone https://github.com/0xPolygonHermez/pilcom.git
+          cd pilcom
+          npm install
+
+      - name: Check Build Without Halo2
+        run: cargo check --all --no-default-features
+
+      - name: Build with All Features
+        run: cargo build --all --release --all-features
+
+      - name: Run Tests
+        run: |
+          PILCOM=$(pwd)/pilcom/ \
+          cargo test --all --release --verbose --all-features -- --include-ignored --nocapture --test-threads=1
+
+      - name: Run Benchmarks
+        run: cargo bench
+        working-directory: compiler
